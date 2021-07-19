@@ -15,7 +15,9 @@ executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 
 def register(dispatcher: Dispatcher):
-    dispatcher.job_queue.run_repeating(_callback, interval=datetime.timedelta(minutes=30))
+    dispatcher.job_queue.run_repeating(
+        _callback,
+        interval=datetime.timedelta(minutes=BotContext.get().bot_env.update_interval))
     dispatcher.add_handler(CommandHandler("checknow", _check_now))
 
 

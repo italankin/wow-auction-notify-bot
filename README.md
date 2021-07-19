@@ -18,6 +18,7 @@ The bot gathers prices from WoW auctions (EU region only) and sends notification
 |BNET_CLIENT_ID|Battle.net client ID|
 |BNET_CLIENT_SECRET|Battle.net client secret|
 |MAX_NOTIFICATIONS|Maximum number of notifications for one user (does not apply to admin users, see `users` table)|
+|UPDATE_INTERVAL|Update interval in minutes|
 
 ## Docker
 
