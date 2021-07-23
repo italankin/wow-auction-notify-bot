@@ -29,7 +29,10 @@ def register(dispatcher: Dispatcher):
         ConversationHandler(
             entry_points=[CommandHandler('add', _add, filters=~Filters.update.edited_message)],
             states={
-                STAGE_REALM: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_select_realm)],
+                STAGE_REALM: [
+                    MessageHandler(filters=Filters.text & ~Filters.command, callback=_select_realm),
+                    CallbackQueryHandler(callback=_select_realm, pattern=re.compile("realm:\\d+"))
+                ],
                 STAGE_ITEM: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_select_item)],
                 STAGE_PRICE: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_price)],
                 STAGE_MIN_QTY: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_min_qty)]
@@ -43,8 +46,21 @@ def register(dispatcher: Dispatcher):
 
 
 def _add(update: Update, context: CallbackContext):
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
-    update.effective_user.send_message('Enter the realm:')
+    telegram_id = update.effective_user.id
+    logger.info(f"user_id={telegram_id} state={context.user_data}")
+    db = BotContext.get().database
+    user = db.get_user(telegram_id)
+    if not user:
+        update.effective_user.send_message('Enter realm name:')
+    else:
+        user_realms = db.get_user_realms(user.user_id)
+        if len(user_realms) == 0:
+            update.effective_user.send_message('Enter realm name:')
+        else:
+            keyboard = [[
+                InlineKeyboardButton(r.name, callback_data=str(r.connected_realm_id)) for r in user_realms
+            ]]
+            update.effective_user.send_message('Enter or choose realm:', reply_markup=InlineKeyboardMarkup(keyboard))
     return STAGE_REALM
 
 
@@ -57,13 +73,18 @@ def _cancel(update: Update, context: CallbackContext):
 def _select_realm(update: Update, context: CallbackContext):
     logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
 
-    context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
+    if update.callback_query:
+        update.callback_query.answer()
+        db = BotContext.get().database
+        realm = db.get_connected_realm_by_id(int(update.callback_query.data))
+    else:
+        context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
 
-    slug = update.message.text.replace('\'', '').replace(' ', '-').lower()
-    realm = _get_connected_realm(slug)
-    if not realm:
-        update.effective_user.send_message(f"Error: can't find realm '{update.message.text}'")
-        return STAGE_REALM
+        slug = update.message.text.replace('\'', '').replace(' ', '-').lower()
+        realm = _get_connected_realm(slug)
+        if not realm:
+            update.effective_user.send_message(f"Error: can't find realm '{update.message.text}'")
+            return STAGE_REALM
     context.user_data[KEY_REALM] = realm
     update.effective_user.send_message('Enter item ID:')
     return STAGE_ITEM
