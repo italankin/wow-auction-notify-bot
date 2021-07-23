@@ -1,5 +1,26 @@
 import re
-from functools import wraps
+
+
+def sanitize_str(s: str) -> str:
+    return s \
+        .replace('_', '\\_') \
+        .replace('*', '\\*') \
+        .replace('[', '\\[') \
+        .replace(']', '\\]') \
+        .replace('(', '\\(') \
+        .replace(')', '\\)') \
+        .replace('~', '\\~') \
+        .replace('`', '\\`') \
+        .replace('>', '\\>') \
+        .replace('#', '\\#') \
+        .replace('+', '\\+') \
+        .replace('-', '\\-') \
+        .replace('=', '\\=') \
+        .replace('|', '\\|') \
+        .replace('{', '\\{') \
+        .replace('}', '\\}') \
+        .replace('.', '\\.') \
+        .replace('!', '\\-')
 
 
 def to_human_price(price: int) -> str:
@@ -19,5 +40,5 @@ def from_human_price(price: str) -> int:
 
 
 def wowhead_link(item_id: int, name: str) -> str:
-    sanitized_name = name.replace('.', '\\.')
+    sanitized_name = sanitize_str(name)
     return f"[\\[{sanitized_name}\\]](https://www.wowhead.com/item={item_id})"

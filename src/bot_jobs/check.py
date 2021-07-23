@@ -8,7 +8,7 @@ from telegram.ext import Dispatcher, CallbackContext, CommandHandler
 
 from bot_context import BotContext
 from model.notification import Notification
-from utils import to_human_price, wowhead_link
+from utils import to_human_price, wowhead_link, sanitize_str
 
 logger = logging.getLogger(__name__)
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
@@ -60,9 +60,10 @@ def _check_and_notify(context: CallbackContext, connected_realm_id: int, notific
         if qty_under_min >= notification.min_qty:
             avg_price = int(price_under_min / qty_under_min)
             user = db.get_user_by_id(notification.user_id)
-            price = to_human_price(avg_price).replace('.', '\\.')
+            price = sanitize_str(to_human_price(avg_price))
             item = wowhead_link(notification.item_id, item_names[notification.item_id])
-            text = f"{item}: {qty_under_min} lots available on *{realm_name}* with average price of {price}"
+            realm_name_san = sanitize_str(realm_name)
+            text = f"{item}: {qty_under_min} lots available on *{realm_name_san}* with average price of {price}"
             context.bot.send_message(
                 user.telegram_id,
                 text,

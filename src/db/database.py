@@ -34,6 +34,7 @@ class Database:
             con.execute(
                 'CREATE TABLE IF NOT EXISTS connected_realms ('
                 'id INTEGER PRIMARY KEY,'
+                'region TEXT NOT NULL,'
                 'slug TEXT NOT NULL,'
                 'name TEXT NOT NULL'
                 ')'
@@ -52,18 +53,19 @@ class Database:
                 ')'
             )
 
-    def add_connected_realm(self, connected_realm_id: int, slug: str, name: str):
+    def add_connected_realm(self, connected_realm_id: int, region: str, slug: str, name: str):
         with self._get_connection() as con:
-            con.execute('INSERT INTO connected_realms VALUES(?, ?, ?)', (connected_realm_id, slug, name))
-            logger.info(f"added connected realm id={connected_realm_id}, name='{name}'")
+            con.execute('INSERT INTO connected_realms VALUES(?, ?, ?, ?)',
+                        (connected_realm_id, region, slug, name))
+            logger.info(f"added connected realm id={connected_realm_id}: {region}-{name}'")
 
-    def get_connected_realm(self, slug: str) -> Optional[ConnectedRealm]:
+    def get_connected_realm(self, region: str, slug: str) -> Optional[ConnectedRealm]:
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM connected_realms WHERE slug = ?', [slug])
+            cur = con.execute('SELECT * FROM connected_realms WHERE region = ? AND slug = ?', [region, slug])
             row = cur.fetchone()
             if row:
                 return ConnectedRealm(*row)
-        logger.info(f"connected realm slug={slug} not found")
+        logger.info(f"connected realm {region}-{slug} not found")
         return None
 
     def get_connected_realm_by_id(self, connected_realm_id: int) -> Optional[ConnectedRealm]:
@@ -74,6 +76,14 @@ class Database:
                 return ConnectedRealm(*row)
         logger.info(f"connected realm id={connected_realm_id} not found")
         return None
+
+    def get_connected_realms(self, ids: list[int]) -> list[ConnectedRealm]:
+        result = []
+        with self._get_connection() as con:
+            cur = con.execute('SELECT * FROM connected_realms WHERE id in (%s)' % (','.join('?' * len(ids))), ids)
+            for row in cur:
+                result.append(ConnectedRealm(*row))
+        return result
 
     def add_item(self, item_id: int, name: str):
         with self._get_connection() as con:
@@ -156,11 +166,21 @@ class Database:
                 result.append(Notification(*row))
         return result
 
-    def get_user_realms(self, user_id: int) -> list[ConnectedRealm]:
+    def get_all_user_realms(self, user_id: int) -> list[ConnectedRealm]:
         result = []
         with self._get_connection() as con:
             cur = con.execute('SELECT DISTINCT * FROM connected_realms '
                               'WHERE id in (SELECT connected_realm_id FROM notifications WHERE user_id = ?)', [user_id])
+            for row in cur:
+                result.append(ConnectedRealm(*row))
+        return result
+
+    def get_user_realms(self, user_id: int, region: str) -> list[ConnectedRealm]:
+        result = []
+        with self._get_connection() as con:
+            cur = con.execute('SELECT DISTINCT * FROM connected_realms WHERE region = ? AND '
+                              'id in (SELECT connected_realm_id FROM notifications WHERE user_id = ?)',
+                              [region, user_id])
             for row in cur:
                 result.append(ConnectedRealm(*row))
         return result

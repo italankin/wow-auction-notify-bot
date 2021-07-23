@@ -7,15 +7,17 @@ from model.auction import Auction
 from model.connected_realm import ConnectedRealm
 from model.item import Item
 
+REGIONS = ['us', 'eu', 'kr', 'tw']
+
 TOKEN_URL = 'https://us.battle.net/oauth/token'
-DATA_URL = 'https://eu.api.blizzard.com'
+DATA_URL = 'https://%s.api.blizzard.com'
 
 PATH_SEARCH_CONNECTED_REALM = '/data/wow/search/connected-realm'
 PATH_AUCTION_CONNECTED_REALM = '/data/wow/connected-realm/%d/auctions'
 PATH_ITEM = '/data/wow/item/%d'
 
-PARAM_DYNAMIC_NAMESPACE = 'dynamic-eu'
-PARAM_STATIC_NAMESPACE = 'static-eu'
+PARAM_DYNAMIC_NAMESPACE = 'dynamic-%s'
+PARAM_STATIC_NAMESPACE = 'static-%s'
 PARAM_LOCALE = 'en_US'
 
 logger = logging.getLogger(__name__)
@@ -28,13 +30,13 @@ class WowGameApi:
         self._client_secret = client_secret
         self._access_token = None
 
-    def connected_realm(self, slug: str) -> Optional[ConnectedRealm]:
+    def connected_realm(self, region: str, slug: str) -> Optional[ConnectedRealm]:
         params = {
-            'namespace': PARAM_DYNAMIC_NAMESPACE,
+            'namespace': PARAM_DYNAMIC_NAMESPACE % region,
             'realms.slug': slug
         }
         headers = {'Authorization': f"Bearer {self._get_access_token()}"}
-        response = requests.get(f"{DATA_URL}{PATH_SEARCH_CONNECTED_REALM}", headers=headers, params=params)
+        response = requests.get(f"{DATA_URL % region}{PATH_SEARCH_CONNECTED_REALM}", headers=headers, params=params)
         self._check_status_code(response.status_code)
         if response.status_code != 200:
             logger.error(f"failed to find connected realm: status={response.status_code}\n{response.text}")
@@ -48,18 +50,18 @@ class WowGameApi:
                 for realms in data['realms']:
                     name = realms['name'][PARAM_LOCALE]
                     break
-                return ConnectedRealm(realm_id, slug, name)
+                return ConnectedRealm(realm_id, region, slug, name)
         logger.info(f"no connected realms found for slug={slug}")
         return None
 
-    def auctions(self, connected_realm_id: int, item_ids: list[int]) -> dict[int, Auction]:
+    def auctions(self, region: str, connected_realm_id: int, item_ids: list[int]) -> dict[int, Auction]:
         params = {
-            'namespace': PARAM_DYNAMIC_NAMESPACE,
+            'namespace': PARAM_DYNAMIC_NAMESPACE % region,
             'locale': PARAM_LOCALE
         }
         headers = {'Authorization': f"Bearer {self._get_access_token()}"}
         response = requests.get(
-            f"{DATA_URL}{PATH_AUCTION_CONNECTED_REALM % connected_realm_id}", headers=headers, params=params)
+            f"{DATA_URL % region}{PATH_AUCTION_CONNECTED_REALM % connected_realm_id}", headers=headers, params=params)
         self._check_status_code(response.status_code)
         if response.status_code != 200:
             logger.error(f"failed to fetch auction data for connected_realm_id={connected_realm_id}: "
@@ -78,13 +80,13 @@ class WowGameApi:
             auction.lots.sort(key=lambda lot: lot.price)
         return auctions_data
 
-    def item_info(self, item_id: int) -> Optional[Item]:
+    def item_info(self, region: str, item_id: int) -> Optional[Item]:
         params = {
-            'namespace': PARAM_STATIC_NAMESPACE,
+            'namespace': PARAM_STATIC_NAMESPACE % region,
             'locale': PARAM_LOCALE
         }
         headers = {'Authorization': f"Bearer {self._get_access_token()}"}
-        response = requests.get(f"{DATA_URL}{PATH_ITEM % item_id}", headers=headers, params=params)
+        response = requests.get(f"{DATA_URL % region}{PATH_ITEM % item_id}", headers=headers, params=params)
         self._check_status_code(response.status_code)
         if response.status_code == 404:
             logger.info(f"item with id={item_id} not found")

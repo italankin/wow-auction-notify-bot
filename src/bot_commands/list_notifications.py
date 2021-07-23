@@ -6,7 +6,7 @@ from telegram.ext import CommandHandler, Dispatcher, CallbackQueryHandler, Callb
 
 from bot_context import BotContext
 from model.notification import Notification
-from utils import to_human_price, wowhead_link
+from utils import to_human_price, wowhead_link, sanitize_str
 
 
 def register(dispatcher: Dispatcher):
@@ -28,14 +28,15 @@ def _command(update: Update, context: CallbackContext):
         update.effective_user.send_message("You don't have active notifications")
         return
     item_names = _get_item_names(notifications)
+    realm_names = _get_realm_names(notifications)
     for notification in notifications:
         callback_data = f"remove:{notification.n_id}"
         button_list = [[InlineKeyboardButton("Delete", callback_data=callback_data)]]
         reply_markup = InlineKeyboardMarkup(button_list)
-        name = item_names[notification.item_id]
-        price = to_human_price(notification.price).replace('.', '\\.')
-        text = (f"{wowhead_link(notification.item_id, name)} "
-                f"for {price} with minimum quantity of {notification.min_qty}")
+        price = sanitize_str(to_human_price(notification.price))
+        item = wowhead_link(notification.item_id, item_names[notification.item_id])
+        realm_name = sanitize_str(realm_names[notification.connected_realm_id])
+        text = f"*{realm_name}*: {item} for {price} with minimum quantity of {notification.min_qty}"
         update.effective_user.send_message(
             text,
             parse_mode=PARSEMODE_MARKDOWN_V2,
@@ -67,4 +68,15 @@ def _get_item_names(notifications: list[Notification]) -> dict[int, str]:
     items = BotContext.get().database.get_items(items_ids)
     for item in items:
         result[item.item_id] = item.name
+    return result
+
+
+def _get_realm_names(notifications: list[Notification]) -> dict[int, str]:
+    realm_ids = set()
+    for n in notifications:
+        realm_ids.add(n.connected_realm_id)
+    result = {}
+    realms = BotContext.get().database.get_connected_realms(list(realm_ids))
+    for realm in realms:
+        result[realm.connected_realm_id] = f"{realm.region.upper()}-{realm.name}"
     return result
