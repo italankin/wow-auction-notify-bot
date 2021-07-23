@@ -44,7 +44,8 @@ def _check_and_notify(context: CallbackContext, connected_realm_id: int, notific
     db = BotContext.get().database
     item_names = _get_item_names(notifications)
     realm_name = db.get_connected_realm_by_id(connected_realm_id).name
-    auctions = api.auctions(connected_realm_id, [n.item_id for n in notifications])
+    item_ids = [n.item_id for n in notifications]
+    auctions = api.with_retry(lambda: api.auctions(connected_realm_id, item_ids))
     sent_notifications = 0
     for notification in notifications:
         item_auctions = auctions[notification.item_id]

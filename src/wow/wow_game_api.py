@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Callable, TypeVar
 
 import requests
 
@@ -35,6 +35,7 @@ class WowGameApi:
         }
         headers = {'Authorization': f"Bearer {self._get_access_token()}"}
         response = requests.get(f"{DATA_URL}{PATH_SEARCH_CONNECTED_REALM}", headers=headers, params=params)
+        self._check_status_code(response.status_code)
         if response.status_code != 200:
             logger.error(f"failed to find connected realm: status={response.status_code}\n{response.text}")
             return None
@@ -59,6 +60,7 @@ class WowGameApi:
         headers = {'Authorization': f"Bearer {self._get_access_token()}"}
         response = requests.get(
             f"{DATA_URL}{PATH_AUCTION_CONNECTED_REALM % connected_realm_id}", headers=headers, params=params)
+        self._check_status_code(response.status_code)
         if response.status_code != 200:
             logger.error(f"failed to fetch auction data for connected_realm_id={connected_realm_id}: "
                          f"status={response.status_code}\n{response.text}")
@@ -83,14 +85,33 @@ class WowGameApi:
         }
         headers = {'Authorization': f"Bearer {self._get_access_token()}"}
         response = requests.get(f"{DATA_URL}{PATH_ITEM % item_id}", headers=headers, params=params)
+        self._check_status_code(response.status_code)
         if response.status_code == 404:
             logger.info(f"item with id={item_id} not found")
             return None
         if response.status_code != 200:
             logger.error(f"failed to fetch item id={item_id} info: "
                          f"status={response.status_code}\n{response.text}")
+            return None
         name = response.json()['name']
         return Item(item_id, name)
+
+    T = TypeVar('T')
+
+    def with_retry(self, func: Callable[[], T], max_retries=5) -> T:
+        count = 0
+        while True:
+            try:
+                return func()
+            except WowGameApi.UnauthorizedError as e:
+                count += 1
+                if count >= max_retries:
+                    raise e
+
+    def _check_status_code(self, status_code):
+        if status_code == 401:
+            self._access_token = None
+            raise WowGameApi.UnauthorizedError()
 
     def _get_access_token(self) -> str:
         if self._access_token:
@@ -107,3 +128,6 @@ class WowGameApi:
             self._access_token = token
             return self._access_token
         raise ValueError(f"access token not found in response:\n{response.text}")
+
+    class UnauthorizedError(Exception):
+        pass

@@ -1,9 +1,11 @@
 import logging
+import re
 from typing import Optional
 
-from telegram import Update, ChatAction
+from telegram import Update, ChatAction, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.constants import PARSEMODE_MARKDOWN_V2
-from telegram.ext import CommandHandler, Dispatcher, CallbackContext, Filters, ConversationHandler, MessageHandler
+from telegram.ext import CommandHandler, Dispatcher, CallbackContext, Filters, ConversationHandler, MessageHandler, \
+    CallbackQueryHandler
 
 from bot_context import BotContext
 from db.database import Item
@@ -158,7 +160,8 @@ def _get_connected_realm(slug: str) -> Optional[ConnectedRealm]:
     realm = db.get_connected_realm(slug)
     if realm:
         return realm
-    realm = BotContext.get().wow_game_api.connected_realm(slug)
+    api = BotContext.get().wow_game_api
+    realm = api.with_retry(lambda: api.connected_realm(slug))
     if realm:
         db.add_connected_realm(realm.connected_realm_id, realm.slug, realm.name)
     return realm
@@ -169,7 +172,8 @@ def _get_item_info(item_id: int) -> Optional[Item]:
     item = db.get_item(item_id)
     if item:
         return item
-    item = BotContext.get().wow_game_api.item_info(item_id)
+    api = BotContext.get().wow_game_api
+    item = api.with_retry(lambda: api.item_info(item_id))
     if item:
         db.add_item(item_id, item.name)
     return item
