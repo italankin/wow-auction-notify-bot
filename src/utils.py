@@ -24,7 +24,7 @@ def sanitize_str(s: str) -> str:
 
 
 def to_human_price(price: int) -> str:
-    return f"{price / 10000}g"
+    return f"{'{:.2f}'.format(price / 10000)}g"
 
 
 def from_human_price(price: str) -> int:

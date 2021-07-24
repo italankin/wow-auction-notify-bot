@@ -10,6 +10,7 @@ from telegram.ext import CommandHandler, Dispatcher, CallbackContext, Filters, C
 from bot_context import BotContext
 from db.database import Item
 from model.connected_realm import ConnectedRealm
+from model.notification import Notification
 from utils import from_human_price, to_human_price, wowhead_link, sanitize_str
 from wow.wow_game_api import REGIONS
 
@@ -19,19 +20,24 @@ MAX_USER_REALMS = 3
 
 MIN_PRICE = 100  # 1 silver
 MAX_PRICE = 2_000_000 * 10000  # 2 mil gold
-MIN_QTY_UPPER_BOUND = 50000
+VALUE_UPPER_BOUND = 50000
 
 STAGE_REGION = 0
 STAGE_REALM = 1
 STAGE_USER_REALM = 2
 STAGE_ITEM = 3
-STAGE_PRICE = 4
-STAGE_MIN_QTY = 5
+STAGE_KIND = 4
+STAGE_PRICE = 5
+STAGE_VALUE = 6
+
+KEY_CONVERSATION_ACTIVE = 'conversation_active'
 
 KEY_REGION = 'region'
 KEY_REALM = 'realm'
 KEY_ITEM = 'item'
+KEY_KIND = 'kind'
 KEY_PRICE = 'price'
+KEY_VALUE = 'value'
 
 
 def register(dispatcher: Dispatcher):
@@ -51,8 +57,9 @@ def register(dispatcher: Dispatcher):
                     CallbackQueryHandler(callback=_prompt_region, pattern=re.compile("other"))
                 ],
                 STAGE_ITEM: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_select_item)],
+                STAGE_KIND: [CallbackQueryHandler(callback=_select_kind, pattern=re.compile("kind:.+"))],
                 STAGE_PRICE: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_price)],
-                STAGE_MIN_QTY: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_min_qty)]
+                STAGE_VALUE: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_value)]
             },
             fallbacks=[
                 CommandHandler('add', _entry_point, filters=~Filters.update.edited_message),
@@ -63,6 +70,7 @@ def register(dispatcher: Dispatcher):
 
 
 def _entry_point(update: Update, context: CallbackContext):
+    context.user_data[KEY_CONVERSATION_ACTIVE] = True
     db = BotContext.get().database
     user = db.get_user(update.effective_user.id)
     if user:
@@ -91,6 +99,9 @@ def _prompt_region(update: Update, context: CallbackContext):
 
 
 def _select_region(update: Update, context: CallbackContext):
+    if not update.callback_query:
+        return STAGE_REGION
+
     telegram_id = update.effective_user.id
     logger.info(f"user_id={telegram_id} state={context.user_data}")
     update.callback_query.answer()
@@ -149,14 +160,51 @@ def _select_item(update: Update, context: CallbackContext):
         update.effective_user.send_message('Error: invalid item ID')
         return STAGE_ITEM
 
-    # prompt max price
     realm = context.user_data[KEY_REALM]
     item = _get_item_info(realm, item_id)
     if not item:
         update.effective_user.send_message(f"Error: can't find item with ID '{update.message.text}'")
         return STAGE_ITEM
     context.user_data[KEY_ITEM] = item
-    update.effective_user.send_message('Enter maximum price:')
+
+    return _prompt_kind(update, context)
+
+
+def _prompt_kind(update: Update, context: CallbackContext):
+    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
+    reply_markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "Maximum price", callback_data=f"kind:{Notification.Kind.MAX_PRICE.value[0]}"),
+        InlineKeyboardButton(
+            "Market price", callback_data=f"kind:{Notification.Kind.MARKET_PRICE.value[0]}"),
+        InlineKeyboardButton(
+            "Average price", callback_data=f"kind:{Notification.Kind.AVG_PRICE.value[0]}")
+    ]])
+    update.effective_user.send_message('Select notification type:', reply_markup=reply_markup)
+    return STAGE_KIND
+
+
+def _select_kind(update: Update, context: CallbackContext):
+    if not update.callback_query:
+        return STAGE_KIND
+
+    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
+
+    update.callback_query.answer()
+    kind = Notification.Kind.from_str(update.callback_query.data.split(':')[1])
+    context.user_data[KEY_KIND] = kind
+
+    if kind == Notification.Kind.MARKET_PRICE:
+        context.user_data[KEY_VALUE] = 1
+
+    # prompt price
+    if kind == Notification.Kind.MAX_PRICE:
+        text = 'Enter maximum price:'
+    elif kind == Notification.Kind.MARKET_PRICE:
+        text = 'Enter market price:'
+    else:
+        text = 'Enter average price:'
+    update.effective_user.send_message(text)
     return STAGE_PRICE
 
 
@@ -178,46 +226,60 @@ def _enter_price(update: Update, context: CallbackContext):
         return STAGE_PRICE
     context.user_data[KEY_PRICE] = price
 
+    if context.user_data[KEY_KIND] == Notification.Kind.MARKET_PRICE:
+        _add_notification(update, context.user_data)
+        return ConversationHandler.END
+
     # prompt min qty
     update.effective_user.send_message('Enter minimum available quantity:')
-    return STAGE_MIN_QTY
+    return STAGE_VALUE
 
 
-def _enter_min_qty(update: Update, context: CallbackContext):
+def _enter_value(update: Update, context: CallbackContext):
     logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
+
+    try:
+        value = int(update.message.text)
+    except:
+        update.effective_user.send_message(f"Invalid quantity: {update.message.text}")
+        return STAGE_VALUE
+    if value < 1 or value > VALUE_UPPER_BOUND:
+        update.effective_user.send_message(
+            f"Invalid quantity: {value}, must be within bounds [1, {VALUE_UPPER_BOUND}]")
+        return STAGE_VALUE
+    context.user_data[KEY_VALUE] = value
 
     context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
 
-    try:
-        min_qty = int(update.message.text)
-    except:
-        update.effective_user.send_message(f"Invalid quantity: {update.message.text}")
-        return STAGE_MIN_QTY
-    if min_qty < 1 or min_qty > MIN_QTY_UPPER_BOUND:
-        update.effective_user.send_message(
-            f"Invalid quantity: {min_qty}, must be within bounds [1, {MIN_QTY_UPPER_BOUND}]")
-        return STAGE_MIN_QTY
+    _add_notification(update, context.user_data)
+    context.user_data.clear()
+    return ConversationHandler.END
 
+
+def _add_notification(update, user_data):
     user = _get_or_create_user(update.effective_user.id)
-    connected_realm = context.user_data[KEY_REALM]
-    item = context.user_data[KEY_ITEM]
-    price = context.user_data[KEY_PRICE]
+    connected_realm = user_data[KEY_REALM]
+    item = user_data[KEY_ITEM]
+    price = user_data[KEY_PRICE]
+    kind = user_data[KEY_KIND]
+    value = user_data[KEY_VALUE]
 
     db = BotContext.get().database
-    db.add_notification(user.user_id, connected_realm.connected_realm_id, item.item_id, price, min_qty)
+    db.add_notification(user.user_id, connected_realm.connected_realm_id, item.item_id, kind.value[0], price, value)
 
     item_link = wowhead_link(item.item_id, item.name)
     price_str = sanitize_str(to_human_price(price))
     realm_name = sanitize_str(connected_realm.name)
-    text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
-            f"with price {price_str} and minimum quantity of {min_qty}")
-    update.effective_user.send_message(
-        text,
-        parse_mode=PARSEMODE_MARKDOWN_V2,
-        disable_web_page_preview=True
-    )
-    context.user_data.clear()
-    return ConversationHandler.END
+    if kind == Notification.Kind.MAX_PRICE:
+        text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
+                f"with maximum price {price_str} and minimum quantity of {value}")
+    elif kind == Notification.Kind.MARKET_PRICE:
+        text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
+                f"with market price of {price_str}")
+    else:
+        text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
+                f"with average price {price_str} and minimum quantity of {value}")
+    update.effective_user.send_message(text, parse_mode=PARSEMODE_MARKDOWN_V2, disable_web_page_preview=True)
 
 
 def _cancel(update: Update, context: CallbackContext):

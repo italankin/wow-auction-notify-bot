@@ -4,6 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatAct
 from telegram.constants import PARSEMODE_MARKDOWN_V2
 from telegram.ext import CommandHandler, Dispatcher, CallbackQueryHandler, CallbackContext, Filters
 
+from bot_commands.add_notification import KEY_CONVERSATION_ACTIVE
 from bot_context import BotContext
 from model.notification import Notification
 from utils import to_human_price, wowhead_link, sanitize_str
@@ -15,6 +16,9 @@ def register(dispatcher: Dispatcher):
 
 
 def _command(update: Update, context: CallbackContext):
+    if KEY_CONVERSATION_ACTIVE in context.user_data:
+        return
+
     user_id = update.effective_user.id
     db = BotContext.get().database
     user = db.get_user(user_id)
@@ -36,7 +40,12 @@ def _command(update: Update, context: CallbackContext):
         price = sanitize_str(to_human_price(notification.price))
         item = wowhead_link(notification.item_id, item_names[notification.item_id])
         realm_name = sanitize_str(realm_names[notification.connected_realm_id])
-        text = f"*{realm_name}*: {item} for {price} with minimum quantity of {notification.min_qty}"
+        if notification.kind == Notification.Kind.MAX_PRICE:
+            text = f"*{realm_name}*: {item} wth maximum price of {price} and minimum quantity of {notification.value}"
+        elif notification.kind == Notification.Kind.MARKET_PRICE:
+            text = f"*{realm_name}*: {item} with market price of {price}"
+        else:
+            text = f"*{realm_name}*: {item} with average price of {price} and minimum quantity of {notification.value}"
         update.effective_user.send_message(
             text,
             parse_mode=PARSEMODE_MARKDOWN_V2,

@@ -45,8 +45,9 @@ class Database:
                 'user_id INTEGER NOT NULL,'
                 'connected_realm_id INTEGER NOT NULL,'
                 'item_id INTEGER NOT NULL,'
+                'kind TEXT NOT NULL,'
                 'price INTEGER NOT NULL,'
-                'min_qty INTEGER DEFAULT 1,'
+                'value INTEGER DEFAULT 1,'
                 'FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,'
                 'FOREIGN KEY(connected_realm_id) REFERENCES connected_realms(id) ON DELETE NO ACTION,'
                 'FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE NO ACTION'
@@ -145,11 +146,19 @@ class Database:
             con.execute(sql, [user_id])
             logger.info(f"deleted user id={user_id}")
 
-    def add_notification(self, user_id: int, connected_realm_id: int, item_id: int, price: int, min_qty: int):
+    def add_notification(
+            self,
+            user_id: int,
+            connected_realm_id: int,
+            item_id: int,
+            kind: str,
+            price: int,
+            value: int
+    ):
         with self._get_connection() as con:
-            sql = ('INSERT INTO notifications(user_id, connected_realm_id, item_id, price, min_qty) '
-                   'VALUES (?, ?, ?, ?, ?)')
-            cur = con.execute(sql, (user_id, connected_realm_id, item_id, price, min_qty))
+            sql = ('INSERT INTO notifications(user_id, connected_realm_id, item_id, kind, price, value) '
+                   'VALUES (?, ?, ?, ?, ?, ?)')
+            cur = con.execute(sql, (user_id, connected_realm_id, item_id, kind, price, value))
             logger.info(f"added notification id={cur.lastrowid}")
 
     def get_notifications(self) -> list[Notification]:
