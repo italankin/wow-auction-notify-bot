@@ -15,6 +15,12 @@ from wow.wow_game_api import REGIONS
 
 logger = logging.getLogger(__name__)
 
+MAX_USER_REALMS = 3
+
+MIN_PRICE = 100  # 1 silver
+MAX_PRICE = 2_000_000 * 10000  # 2 mil gold
+MIN_QTY_UPPER_BOUND = 50000
+
 STAGE_REGION = 0
 STAGE_REALM = 1
 STAGE_USER_REALM = 2
@@ -31,7 +37,7 @@ KEY_PRICE = 'price'
 def register(dispatcher: Dispatcher):
     dispatcher.add_handler(
         ConversationHandler(
-            entry_points=[CommandHandler('add', _add, filters=~Filters.update.edited_message)],
+            entry_points=[CommandHandler('add', _entry_point, filters=~Filters.update.edited_message)],
             states={
                 STAGE_REGION: [
                     CallbackQueryHandler(callback=_select_region, pattern=re.compile("region:.."))
@@ -49,18 +55,18 @@ def register(dispatcher: Dispatcher):
                 STAGE_MIN_QTY: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_min_qty)]
             },
             fallbacks=[
-                CommandHandler('add', _add, filters=~Filters.update.edited_message),
+                CommandHandler('add', _entry_point, filters=~Filters.update.edited_message),
                 CommandHandler('cancel', _cancel, filters=~Filters.update.edited_message)
             ]
         )
     )
 
 
-def _add(update: Update, context: CallbackContext):
+def _entry_point(update: Update, context: CallbackContext):
     db = BotContext.get().database
     user = db.get_user(update.effective_user.id)
     if user:
-        user_realms = db.get_all_user_realms(user.user_id)[:3]
+        user_realms = db.get_all_user_realms(user.user_id)[:MAX_USER_REALMS]
         if len(user_realms) > 0:
             keyboard = [[]]
             for realm in user_realms:
@@ -164,10 +170,10 @@ def _enter_price(update: Update, context: CallbackContext):
     except ValueError as e:
         update.effective_user.send_message(str(e))
         return STAGE_PRICE
-    if price < 100:
+    if price < MIN_PRICE:
         update.effective_user.send_message('Error: price must be >= 0.01g')
         return STAGE_PRICE
-    if price > 10_000_000 * 10000:
+    if price > MAX_PRICE:
         update.effective_user.send_message('Error: price is too high')
         return STAGE_PRICE
     context.user_data[KEY_PRICE] = price
@@ -187,8 +193,9 @@ def _enter_min_qty(update: Update, context: CallbackContext):
     except:
         update.effective_user.send_message(f"Invalid quantity: {update.message.text}")
         return STAGE_MIN_QTY
-    if min_qty < 1 or min_qty > 50000:
-        update.effective_user.send_message(f"Invalid quantity: {min_qty}")
+    if min_qty < 1 or min_qty > MIN_QTY_UPPER_BOUND:
+        update.effective_user.send_message(
+            f"Invalid quantity: {min_qty}, must be within bounds [1, {MIN_QTY_UPPER_BOUND}]")
         return STAGE_MIN_QTY
 
     user = _get_or_create_user(update.effective_user.id)
