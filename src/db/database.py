@@ -169,8 +169,11 @@ class Database:
     def get_all_user_realms(self, user_id: int) -> list[ConnectedRealm]:
         result = []
         with self._get_connection() as con:
-            cur = con.execute('SELECT DISTINCT * FROM connected_realms '
-                              'WHERE id in (SELECT connected_realm_id FROM notifications WHERE user_id = ?)', [user_id])
+            sql = ('SELECT DISTINCT n.connected_realm_id, cr.region, cr.slug, cr.name '
+                   'FROM notifications n '
+                   'INNER JOIN connected_realms cr ON n.connected_realm_id = cr.id '
+                   'WHERE n.user_id = ?')
+            cur = con.execute(sql, [user_id])
             for row in cur:
                 result.append(ConnectedRealm(*row))
         return result
