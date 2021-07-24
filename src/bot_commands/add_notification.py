@@ -1,4 +1,3 @@
-import logging
 import re
 from typing import Optional
 
@@ -13,8 +12,6 @@ from model.connected_realm import ConnectedRealm
 from model.notification import Notification
 from utils import from_human_price, to_human_price, wowhead_link, sanitize_str
 from wow.wow_game_api import REGIONS
-
-logger = logging.getLogger(__name__)
 
 MAX_USER_REALMS = 3
 
@@ -93,8 +90,6 @@ def _prompt_region(update: Update, context: CallbackContext):
         update.callback_query.answer()
         update.callback_query.message.delete()
 
-    telegram_id = update.effective_user.id
-    logger.info(f"user_id={telegram_id} state={context.user_data}")
     reply_markup = InlineKeyboardMarkup([[
         InlineKeyboardButton(r.upper(), callback_data=f"region:{r}") for r in REGIONS
     ]])
@@ -105,8 +100,6 @@ def _prompt_region(update: Update, context: CallbackContext):
 def _select_region(update: Update, context: CallbackContext):
     if not update.callback_query:
         return STAGE_REGION
-
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
 
     update.callback_query.answer()
     update.callback_query.message.delete()
@@ -132,8 +125,6 @@ def _select_region(update: Update, context: CallbackContext):
 
 
 def _select_realm(update: Update, context: CallbackContext):
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
-
     if update.callback_query:
         update.callback_query.answer()
         update.callback_query.message.delete()
@@ -158,8 +149,6 @@ def _select_realm(update: Update, context: CallbackContext):
 
 
 def _select_item(update: Update, context: CallbackContext):
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
-
     realm = context.user_data[KEY_REALM]
 
     if update.callback_query:
@@ -205,7 +194,6 @@ def _select_item(update: Update, context: CallbackContext):
 
 
 def _prompt_kind(update: Update, context: CallbackContext):
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
     reply_markup = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "Maximum price", callback_data=f"kind:{Notification.Kind.MAX_PRICE.value[0]}"),
@@ -221,8 +209,6 @@ def _prompt_kind(update: Update, context: CallbackContext):
 def _select_kind(update: Update, context: CallbackContext):
     if not update.callback_query:
         return STAGE_KIND
-
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
 
     update.callback_query.answer()
     update.callback_query.message.delete()
@@ -245,8 +231,6 @@ def _select_kind(update: Update, context: CallbackContext):
 
 
 def _enter_price(update: Update, context: CallbackContext):
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
-
     context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
 
     try:
@@ -272,8 +256,6 @@ def _enter_price(update: Update, context: CallbackContext):
 
 
 def _enter_value(update: Update, context: CallbackContext):
-    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
-
     try:
         value = int(update.message.text)
     except:
