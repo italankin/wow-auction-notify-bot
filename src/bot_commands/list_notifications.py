@@ -11,7 +11,7 @@ from utils import to_human_price, wowhead_link, sanitize_str
 
 def register(dispatcher: Dispatcher):
     dispatcher.add_handler(CommandHandler('list', _command, filters=~Filters.update.edited_message))
-    dispatcher.add_handler(CallbackQueryHandler(_callback_query, pattern=re.compile("remove:\\d+")))
+    dispatcher.add_handler(CallbackQueryHandler(_remove, pattern=re.compile("remove:\\d+")))
 
 
 def _command(update: Update, context: CallbackContext):
@@ -49,14 +49,12 @@ def _command(update: Update, context: CallbackContext):
         )
 
 
-def _callback_query(update: Update, context: CallbackContext):
+def _remove(update: Update, _):
     update.callback_query.answer()
     db = BotContext.get().database
     user = db.get_user(update.effective_user.id)
     if not user:
         return
-
-    context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
 
     _, notification_id = update.callback_query.data.split(':')
     if db.delete_notification(user.user_id, notification_id):
