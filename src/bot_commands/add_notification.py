@@ -30,8 +30,6 @@ STAGE_KIND = 4
 STAGE_PRICE = 5
 STAGE_VALUE = 6
 
-KEY_CONVERSATION_ACTIVE = 'conversation_active'
-
 KEY_REGION = 'region'
 KEY_REALM = 'realm'
 KEY_ITEM = 'item'
@@ -56,7 +54,10 @@ def register(dispatcher: Dispatcher):
                     CallbackQueryHandler(callback=_select_realm, pattern=re.compile("realm:\\d+")),
                     CallbackQueryHandler(callback=_prompt_region, pattern=re.compile("other"))
                 ],
-                STAGE_ITEM: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_select_item)],
+                STAGE_ITEM: [
+                    MessageHandler(filters=Filters.text & ~Filters.command, callback=_select_item),
+                    CallbackQueryHandler(callback=_select_item, pattern=re.compile("item:\\d+"))
+                ],
                 STAGE_KIND: [CallbackQueryHandler(callback=_select_kind, pattern=re.compile("kind:.+"))],
                 STAGE_PRICE: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_price)],
                 STAGE_VALUE: [MessageHandler(filters=Filters.text & ~Filters.command, callback=_enter_value)]
@@ -70,7 +71,6 @@ def register(dispatcher: Dispatcher):
 
 
 def _entry_point(update: Update, context: CallbackContext):
-    context.user_data[KEY_CONVERSATION_ACTIVE] = True
     db = BotContext.get().database
     user = db.get_user(update.effective_user.id)
     if user:
@@ -89,6 +89,10 @@ def _entry_point(update: Update, context: CallbackContext):
 
 
 def _prompt_region(update: Update, context: CallbackContext):
+    if update.callback_query:
+        update.callback_query.answer()
+        update.callback_query.message.delete()
+
     telegram_id = update.effective_user.id
     logger.info(f"user_id={telegram_id} state={context.user_data}")
     reply_markup = InlineKeyboardMarkup([[
@@ -102,15 +106,17 @@ def _select_region(update: Update, context: CallbackContext):
     if not update.callback_query:
         return STAGE_REGION
 
-    telegram_id = update.effective_user.id
-    logger.info(f"user_id={telegram_id} state={context.user_data}")
+    logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
+
     update.callback_query.answer()
+    update.callback_query.message.delete()
+
     region = update.callback_query.data.split(':')[1]
     context.user_data[KEY_REGION] = region
 
     # prompt realm
     db = BotContext.get().database
-    user = db.get_user(telegram_id)
+    user = db.get_user(update.effective_user.id)
     if user:
         user_realms = db.get_user_realms(user.user_id, region)
         if len(user_realms) == 0:
@@ -130,6 +136,8 @@ def _select_realm(update: Update, context: CallbackContext):
 
     if update.callback_query:
         update.callback_query.answer()
+        update.callback_query.message.delete()
+
         db = BotContext.get().database
         realm_id = int(update.callback_query.data.split(':')[1])
         realm = db.get_connected_realm_by_id(realm_id)
@@ -140,32 +148,58 @@ def _select_realm(update: Update, context: CallbackContext):
         region = context.user_data[KEY_REGION]
         realm = _get_connected_realm(region, slug)
         if not realm:
-            update.effective_user.send_message(f"Error: can't find realm '{update.message.text}'")
+            update.effective_user.send_message(f"Error: can't find realm")
             return STAGE_REALM
     context.user_data[KEY_REALM] = realm
 
-    # prompt item id
-    update.effective_user.send_message('Enter item ID:')
+    # prompt item
+    update.effective_user.send_message('Enter item name or ID:')
     return STAGE_ITEM
 
 
 def _select_item(update: Update, context: CallbackContext):
     logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
 
+    realm = context.user_data[KEY_REALM]
+
+    if update.callback_query:
+        update.callback_query.answer()
+        update.callback_query.message.delete()
+
+        item_id = int(update.callback_query.data.split(':')[1])
+        item = _get_item_info(realm, item_id)
+        context.user_data[KEY_ITEM] = item
+
+        return _prompt_kind(update, context)
+
     context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
 
-    try:
+    if re.fullmatch('\\d+', update.message.text):
         item_id = int(update.message.text)
-    except:
-        update.effective_user.send_message('Error: invalid item ID')
-        return STAGE_ITEM
-
-    realm = context.user_data[KEY_REALM]
-    item = _get_item_info(realm, item_id)
-    if not item:
-        update.effective_user.send_message(f"Error: can't find item with ID '{update.message.text}'")
-        return STAGE_ITEM
+        item = _get_item_info(realm, item_id)
+        if not item:
+            update.effective_user.send_message(f"Error: can't find item")
+            return STAGE_ITEM
+    else:
+        items = _get_item_infos_by_name(realm, update.message.text[:64])
+        if len(items) == 0:
+            update.effective_user.send_message('Error: no items found')
+            return STAGE_ITEM
+        elif len(items) == 1:
+            item = items[0]
+        else:
+            keyboard = []
+            for it in items:
+                keyboard.append([
+                    InlineKeyboardButton(f"{it.name} ({it.item_id})", callback_data=f"item:{it.item_id}")
+                ])
+            text = "Select item or refine query:"
+            update.effective_user.send_message(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            return STAGE_ITEM
     context.user_data[KEY_ITEM] = item
+
+    text = f"Selected {wowhead_link(item.item_id, item.name)} \\({item.item_id}\\)"
+    update.effective_user.send_message(text, parse_mode=PARSEMODE_MARKDOWN_V2, disable_web_page_preview=True)
 
     return _prompt_kind(update, context)
 
@@ -191,6 +225,8 @@ def _select_kind(update: Update, context: CallbackContext):
     logger.info(f"user_id={update.effective_user.id} state={context.user_data}")
 
     update.callback_query.answer()
+    update.callback_query.message.delete()
+
     kind = Notification.Kind.from_str(update.callback_query.data.split(':')[1])
     context.user_data[KEY_KIND] = kind
 
@@ -258,26 +294,30 @@ def _enter_value(update: Update, context: CallbackContext):
 
 def _add_notification(update, user_data):
     user = _get_or_create_user(update.effective_user.id)
-    connected_realm = user_data[KEY_REALM]
+    realm = user_data[KEY_REALM]
     item = user_data[KEY_ITEM]
     price = user_data[KEY_PRICE]
     kind = user_data[KEY_KIND]
     value = user_data[KEY_VALUE]
 
     db = BotContext.get().database
-    db.add_notification(user.user_id, connected_realm.connected_realm_id, item.item_id, kind.value[0], price, value)
+    if not db.get_item(item.item_id):
+        db.add_item(item.item_id, item.name)
+    if not db.get_connected_realm_by_id(realm.connected_realm_id):
+        db.add_connected_realm(realm.connected_realm_id, realm.region, realm.slug, realm.name)
+    db.add_notification(user.user_id, realm.connected_realm_id, item.item_id, kind.value[0], price, value)
 
     item_link = wowhead_link(item.item_id, item.name)
     price_str = sanitize_str(to_human_price(price))
-    realm_name = sanitize_str(connected_realm.name)
+    realm_name = sanitize_str(realm.name)
     if kind == Notification.Kind.MAX_PRICE:
-        text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
+        text = (f"Added notification for {item_link} on *{realm.region.upper()}\\-{realm_name}* "
                 f"with maximum price {price_str} and minimum quantity of {value}")
     elif kind == Notification.Kind.MARKET_PRICE:
-        text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
+        text = (f"Added notification for {item_link} on *{realm.region.upper()}\\-{realm_name}* "
                 f"with market price of {price_str}")
     else:
-        text = (f"Added notification for {item_link} on *{connected_realm.region.upper()}\\-{realm_name}* "
+        text = (f"Added notification for {item_link} on *{realm.region.upper()}\\-{realm_name}* "
                 f"with average price {price_str} and minimum quantity of {value}")
     update.effective_user.send_message(text, parse_mode=PARSEMODE_MARKDOWN_V2, disable_web_page_preview=True)
 
@@ -305,8 +345,6 @@ def _get_connected_realm(region: str, slug: str) -> Optional[ConnectedRealm]:
         return realm
     api = BotContext.get().wow_game_api
     realm = api.with_retry(lambda: api.connected_realm(region, slug))
-    if realm:
-        db.add_connected_realm(realm.connected_realm_id, realm.region, realm.slug, realm.name)
     return realm
 
 
@@ -316,7 +354,15 @@ def _get_item_info(realm: ConnectedRealm, item_id: int) -> Optional[Item]:
     if item:
         return item
     api = BotContext.get().wow_game_api
-    item = api.with_retry(lambda: api.item_info(realm.region, item_id))
-    if item:
-        db.add_item(item_id, item.name)
+    item = api.with_retry(lambda: api.item_info_by_id(realm.region, item_id))
     return item
+
+
+def _get_item_infos_by_name(realm: ConnectedRealm, item_name: str) -> list[Item]:
+    api = BotContext.get().wow_game_api
+    items = api.with_retry(lambda: api.item_info_by_name(realm.region, item_name))
+    for item in items:
+        if item_name.lower() == item.name.lower():
+            # exact match
+            return [item]
+    return items

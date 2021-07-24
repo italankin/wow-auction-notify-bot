@@ -4,7 +4,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatAct
 from telegram.constants import PARSEMODE_MARKDOWN_V2
 from telegram.ext import CommandHandler, Dispatcher, CallbackQueryHandler, CallbackContext, Filters
 
-from bot_commands.add_notification import KEY_CONVERSATION_ACTIVE
 from bot_context import BotContext
 from model.notification import Notification
 from utils import to_human_price, wowhead_link, sanitize_str
@@ -16,12 +15,8 @@ def register(dispatcher: Dispatcher):
 
 
 def _command(update: Update, context: CallbackContext):
-    if KEY_CONVERSATION_ACTIVE in context.user_data:
-        return
-
-    user_id = update.effective_user.id
     db = BotContext.get().database
-    user = db.get_user(user_id)
+    user = db.get_user(update.effective_user.id)
     if not user:
         return
 

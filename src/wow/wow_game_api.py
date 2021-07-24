@@ -15,6 +15,7 @@ DATA_URL = 'https://%s.api.blizzard.com'
 PATH_SEARCH_CONNECTED_REALM = '/data/wow/search/connected-realm'
 PATH_AUCTION_CONNECTED_REALM = '/data/wow/connected-realm/%d/auctions'
 PATH_ITEM = '/data/wow/item/%d'
+PATH_ITEM_SEARCH = '/data/wow/search/item'
 
 PARAM_DYNAMIC_NAMESPACE = 'dynamic-%s'
 PARAM_STATIC_NAMESPACE = 'static-%s'
@@ -80,7 +81,7 @@ class WowGameApi:
             auction.lots.sort(key=lambda lot: lot.price)
         return auctions_data
 
-    def item_info(self, region: str, item_id: int) -> Optional[Item]:
+    def item_info_by_id(self, region: str, item_id: int) -> Optional[Item]:
         params = {
             'namespace': PARAM_STATIC_NAMESPACE % region,
             'locale': PARAM_LOCALE
@@ -97,6 +98,27 @@ class WowGameApi:
             return None
         name = response.json()['name']
         return Item(item_id, name)
+
+    def item_info_by_name(self, region: str, item_name: str, max_results: int = 5) -> list[Item]:
+        params = {
+            'namespace': PARAM_STATIC_NAMESPACE % region,
+            'name.%s' % PARAM_LOCALE: item_name,
+            '_pageSize': max_results
+        }
+        headers = {'Authorization': f"Bearer {self._get_access_token()}"}
+        response = requests.get(f"{DATA_URL % region}{PATH_ITEM_SEARCH}", headers=headers, params=params)
+        self._check_status_code(response.status_code)
+        if response.status_code != 200:
+            logger.error(f"failed to fetch item name={item_name} info: "
+                         f"status={response.status_code}\n{response.text}")
+            return []
+        results = []
+        for node in response.json()['results']:
+            data = node['data']
+            item_id = data['id']
+            item_name = data['name'][PARAM_LOCALE]
+            results.append(Item(item_id, item_name))
+        return results
 
     T = TypeVar('T')
 

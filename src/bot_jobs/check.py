@@ -134,14 +134,16 @@ def _check_average(
     avg = 0
     qty = 0
     for lot in auction.lots:
-        new_avg = (avg * qty + lot.price * lot.qty) / (qty + lot.qty)
+        new_avg = int(
+            (avg * qty + lot.price * lot.qty) / (qty + lot.qty)
+        )
         if new_avg <= notification.price:
             avg = new_avg
             qty += lot.qty
         else:
             break
     if qty >= notification.value:
-        price = sanitize_str(to_human_price(int(avg)))
+        price = sanitize_str(to_human_price(avg))
         item = wowhead_link(notification.item_id, item_name)
         realm_name_san = sanitize_str(realm_name)
         text = f"{item}: {qty} lots available on *{realm_name_san}* with average price of {price}"
