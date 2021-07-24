@@ -1,6 +1,6 @@
 # WoW Auction Notifier Bot
 
-The bot gathers prices from WoW auctions (EU region only) and sends notifications to subscribers.
+The bot gathers prices from WoW auctions and sends notifications to subscribers.
 
 ## Setup
 
@@ -18,7 +18,7 @@ The bot gathers prices from WoW auctions (EU region only) and sends notification
 |BNET_CLIENT_ID|Battle.net client ID|
 |BNET_CLIENT_SECRET|Battle.net client secret|
 |MAX_NOTIFICATIONS|Maximum number of notifications for one user (does not apply to admin users, see `users` table)|
-|UPDATE_INTERVAL|Update interval in minutes|
+|UPDATE_INTERVAL|Update interval in minutes, default is 60|
 
 ## Docker
 
