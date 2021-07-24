@@ -55,13 +55,14 @@ class Database:
 
     def add_connected_realm(self, connected_realm_id: int, region: str, slug: str, name: str):
         with self._get_connection() as con:
-            con.execute('INSERT INTO connected_realms VALUES(?, ?, ?, ?)',
-                        (connected_realm_id, region, slug, name))
+            sql = 'INSERT INTO connected_realms VALUES(?, ?, ?, ?)'
+            con.execute(sql, (connected_realm_id, region, slug, name))
             logger.info(f"added connected realm id={connected_realm_id}: {region}-{name}'")
 
     def get_connected_realm(self, region: str, slug: str) -> Optional[ConnectedRealm]:
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM connected_realms WHERE region = ? AND slug = ?', [region, slug])
+            sql = 'SELECT * FROM connected_realms WHERE region = ? AND slug = ?'
+            cur = con.execute(sql, [region, slug])
             row = cur.fetchone()
             if row:
                 return ConnectedRealm(*row)
@@ -70,7 +71,8 @@ class Database:
 
     def get_connected_realm_by_id(self, connected_realm_id: int) -> Optional[ConnectedRealm]:
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM connected_realms WHERE id = ?', [connected_realm_id])
+            sql = 'SELECT * FROM connected_realms WHERE id = ?'
+            cur = con.execute(sql, [connected_realm_id])
             row = cur.fetchone()
             if row:
                 return ConnectedRealm(*row)
@@ -80,19 +82,22 @@ class Database:
     def get_connected_realms(self, ids: list[int]) -> list[ConnectedRealm]:
         result = []
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM connected_realms WHERE id in (%s)' % (','.join('?' * len(ids))), ids)
+            sql = 'SELECT * FROM connected_realms WHERE id in (%s)' % (','.join('?' * len(ids)))
+            cur = con.execute(sql, ids)
             for row in cur:
                 result.append(ConnectedRealm(*row))
         return result
 
     def add_item(self, item_id: int, name: str):
         with self._get_connection() as con:
-            con.execute('INSERT INTO items VALUES(?, ?)', (item_id, name))
+            sql = 'INSERT INTO items VALUES(?, ?)'
+            con.execute(sql, (item_id, name))
             logger.info(f"added item id={item_id}, name='{name}'")
 
     def get_item(self, item_id: int) -> Optional[Item]:
         with self._get_connection() as con:
-            cur = con.execute('SELECT name FROM items WHERE id = ?', [item_id])
+            sql = 'SELECT name FROM items WHERE id = ?'
+            cur = con.execute(sql, [item_id])
             row = cur.fetchone()
             if row:
                 return Item(item_id, row[0])
@@ -102,19 +107,22 @@ class Database:
     def get_items(self, item_ids: list[int]) -> list[Item]:
         result = []
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM items WHERE id in (%s)' % (','.join('?' * len(item_ids))), item_ids)
+            sql = 'SELECT * FROM items WHERE id in (%s)' % (','.join('?' * len(item_ids)))
+            cur = con.execute(sql, item_ids)
             for row in cur:
                 result.append(Item(*row))
         return result
 
     def add_user(self, telegram_id: int):
         with self._get_connection() as con:
-            con.execute('INSERT INTO users(telegram_id) VALUES (?)', [telegram_id])
+            sql = 'INSERT INTO users(telegram_id) VALUES (?)'
+            con.execute(sql, [telegram_id])
             logger.info(f"added user telegram_id={telegram_id}")
 
     def get_user(self, telegram_id: int) -> Optional[User]:
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM users WHERE telegram_id = ?', [telegram_id])
+            sql = 'SELECT * FROM users WHERE telegram_id = ?'
+            cur = con.execute(sql, [telegram_id])
             row = cur.fetchone()
             if row:
                 return User(*row)
@@ -123,7 +131,8 @@ class Database:
 
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         with self._get_connection() as con:
-            cur = con.execute('SELECT * FROM users WHERE id = ?', [user_id])
+            sql = 'SELECT * FROM users WHERE id = ?'
+            cur = con.execute(sql, [user_id])
             row = cur.fetchone()
             if row:
                 return User(*row)
@@ -132,28 +141,29 @@ class Database:
 
     def delete_user(self, user_id: int):
         with self._get_connection() as con:
-            con.execute('DELETE FROM users WHERE id = ?', [user_id])
+            sql = 'DELETE FROM users WHERE id = ?'
+            con.execute(sql, [user_id])
             logger.info(f"deleted user id={user_id}")
 
     def add_notification(self, user_id: int, connected_realm_id: int, item_id: int, price: int, min_qty: int):
         with self._get_connection() as con:
-            cur = con.execute(
-                'INSERT INTO notifications(user_id, connected_realm_id, item_id, price, min_qty) '
-                'VALUES (?, ?, ?, ?, ?)',
-                (user_id, connected_realm_id, item_id, price, min_qty)
-            )
+            sql = ('INSERT INTO notifications(user_id, connected_realm_id, item_id, price, min_qty) '
+                   'VALUES (?, ?, ?, ?, ?)')
+            cur = con.execute(sql, (user_id, connected_realm_id, item_id, price, min_qty))
             logger.info(f"added notification id={cur.lastrowid}")
 
     def get_notifications(self) -> list[Notification]:
         result = []
         with self._get_connection() as con:
-            for row in con.execute('SELECT * FROM notifications'):
+            sql = 'SELECT * FROM notifications'
+            for row in con.execute(sql):
                 result.append(Notification(*row))
         return result
 
     def get_notifications_count(self, user_id) -> int:
         with self._get_connection() as con:
-            cur = con.execute('SELECT COUNT(*) FROM notifications WHERE user_id = ?', [user_id])
+            sql = 'SELECT COUNT(*) FROM notifications WHERE user_id = ?'
+            cur = con.execute(sql, [user_id])
             row = cur.fetchone()
             if row:
                 return int(row[0])
@@ -162,7 +172,8 @@ class Database:
     def get_user_notifications(self, user_id: int) -> list[Notification]:
         result = []
         with self._get_connection() as con:
-            for row in con.execute('SELECT * FROM notifications WHERE user_id = ?', [user_id]):
+            sql = 'SELECT * FROM notifications WHERE user_id = ?'
+            for row in con.execute(sql, [user_id]):
                 result.append(Notification(*row))
         return result
 
@@ -181,16 +192,17 @@ class Database:
     def get_user_realms(self, user_id: int, region: str) -> list[ConnectedRealm]:
         result = []
         with self._get_connection() as con:
-            cur = con.execute('SELECT DISTINCT * FROM connected_realms WHERE region = ? AND '
-                              'id in (SELECT connected_realm_id FROM notifications WHERE user_id = ?)',
-                              [region, user_id])
+            sql = ('SELECT DISTINCT * FROM connected_realms WHERE region = ? AND '
+                   'id in (SELECT connected_realm_id FROM notifications WHERE user_id = ?)')
+            cur = con.execute(sql, [region, user_id])
             for row in cur:
                 result.append(ConnectedRealm(*row))
         return result
 
     def delete_notification(self, user_id: int, notification_id: int) -> bool:
         with self._get_connection() as con:
-            cur = con.execute('DELETE FROM notifications WHERE user_id = ? AND id = ?', (user_id, notification_id))
+            sql = 'DELETE FROM notifications WHERE user_id = ? AND id = ?'
+            cur = con.execute(sql, (user_id, notification_id))
             if cur.rowcount > 0:
                 logger.info(f"deleted notification id={notification_id}")
                 return True
