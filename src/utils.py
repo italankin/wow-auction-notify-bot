@@ -20,7 +20,7 @@ def sanitize_str(s: str) -> str:
         .replace('{', '\\{') \
         .replace('}', '\\}') \
         .replace('.', '\\.') \
-        .replace('!', '\\-')
+        .replace('!', '\\!')
 
 
 def to_human_price(price: int) -> str:
