@@ -43,17 +43,16 @@ def _check_and_notify(context: CallbackContext, connected_realm_id: int, notific
     api = BotContext.get().wow_game_api
     db = BotContext.get().database
     item_names = _get_item_names(notifications)
-    realm_name = db.get_connected_realm_by_id(connected_realm_id).name
+    realm = db.get_connected_realm_by_id(connected_realm_id)
     item_ids = [n.item_id for n in notifications]
-    auctions = api.with_retry(lambda: api.auctions(connected_realm_id, item_ids))
+    auctions = api.with_retry(lambda: api.auctions(realm.region, connected_realm_id, item_ids))
     sent_notifications = 0
     for notification in notifications:
-        item_auctions = auctions[notification.item_id]
-        if not item_auctions:
+        if notification.item_id not in auctions:
             continue
         qty_under_min = 0
         price_under_min = 0
-        for lot in item_auctions.lots:
+        for lot in auctions[notification.item_id].lots:
             if lot.price <= notification.price:
                 qty_under_min += lot.qty
                 price_under_min += lot.price * lot.qty
@@ -62,7 +61,7 @@ def _check_and_notify(context: CallbackContext, connected_realm_id: int, notific
             user = db.get_user_by_id(notification.user_id)
             price = sanitize_str(to_human_price(avg_price))
             item = wowhead_link(notification.item_id, item_names[notification.item_id])
-            realm_name_san = sanitize_str(realm_name)
+            realm_name_san = sanitize_str(realm.name)
             text = f"{item}: {qty_under_min} lots available on *{realm_name_san}* with average price of {price}"
             context.bot.send_message(
                 user.telegram_id,
