@@ -1,6 +1,9 @@
 import concurrent.futures
 import datetime
 import logging
+import random
+import threading
+import time
 
 from telegram import Update, ChatAction
 from telegram.constants import PARSEMODE_MARKDOWN_V2
@@ -14,12 +17,51 @@ from utils import to_human_price, wowhead_link, sanitize_str
 logger = logging.getLogger(__name__)
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
+MAX_RETRIES = 1
+SLEEP_INTERVAL = 3
+
 
 def register(dispatcher: Dispatcher):
+    threading.Thread(name='pick-interval', target=_pick_interval, args=[dispatcher], daemon=True).start()
+    dispatcher.add_handler(CommandHandler("checknow", _check_now))
+
+
+def _pick_interval(dispatcher: Dispatcher):
+    logger.debug('Starting _pick_interval')
+    api = BotContext.get().wow_game_api
+    db = BotContext.get().database
+    realms = db.get_all_connected_realms()
+    if len(realms) == 0:
+        logger.debug('_pick_interval: no available realms')
+        _schedule_job(dispatcher)
+        return
+    realm = random.choice(realms)
+    prev_hash = None
+    retries = 0
+    while retries < MAX_RETRIES:
+        retries += 1
+        new_hash = api.with_retry(lambda: api.auctions_snapshot(realm.region, realm.connected_realm_id))
+        logger.debug(f"_pick_interval: prev_hash={prev_hash} new_hash={new_hash}")
+        if not new_hash:
+            # no snapshot available
+            continue
+        if not prev_hash:
+            prev_hash = new_hash
+        elif prev_hash != new_hash:
+            logger.debug('_pick_interval: auction data updated')
+            # auction data got an update
+            break
+        logger.debug(f"_pick_interval: retries left: {MAX_RETRIES - retries}")
+        time.sleep(SLEEP_INTERVAL)
+    _schedule_job(dispatcher)
+
+
+def _schedule_job(dispatcher: Dispatcher):
+    logger.debug('Schedule update job')
     dispatcher.job_queue.run_repeating(
         _callback,
+        first=1,
         interval=datetime.timedelta(minutes=BotContext.get().bot_env.update_interval))
-    dispatcher.add_handler(CommandHandler("checknow", _check_now))
 
 
 def _callback(context: CallbackContext):

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from typing import Optional, Callable, TypeVar
 
@@ -80,6 +81,21 @@ class WowGameApi:
         for _, auction in auctions_data.items():
             auction.lots.sort(key=lambda lot: lot.price)
         return auctions_data
+
+    def auctions_snapshot(self, region, connected_realm_id) -> Optional[str]:
+        params = {
+            'namespace': PARAM_DYNAMIC_NAMESPACE % region,
+            'locale': PARAM_LOCALE
+        }
+        headers = {'Authorization': f"Bearer {self._get_access_token()}"}
+        response = requests.get(
+            f"{DATA_URL % region}{PATH_AUCTION_CONNECTED_REALM % connected_realm_id}", headers=headers, params=params)
+        self._check_status_code(response.status_code)
+        if response.status_code != 200:
+            logger.error(f"failed to fetch auction data for connected_realm_id={connected_realm_id}: "
+                         f"status={response.status_code}\n{response.text}")
+            return None
+        return hashlib.sha1(response.content).hexdigest()
 
     def item_info_by_id(self, region: str, item_id: int) -> Optional[Item]:
         params = {

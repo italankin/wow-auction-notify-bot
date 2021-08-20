@@ -89,6 +89,15 @@ class Database:
                 result.append(ConnectedRealm(*row))
         return result
 
+    def get_all_connected_realms(self) -> list[ConnectedRealm]:
+        result = []
+        with self._get_connection() as con:
+            sql = 'SELECT * FROM connected_realms'
+            cur = con.execute(sql)
+            for row in cur:
+                result.append(ConnectedRealm(*row))
+        return result
+
     def add_item(self, item_id: int, name: str):
         with self._get_connection() as con:
             sql = 'INSERT INTO items VALUES(?, ?)'
