@@ -57,7 +57,7 @@ def _pick_interval(dispatcher: Dispatcher):
 
 
 def _schedule_job(dispatcher: Dispatcher):
-    logger.debug('Schedule update job')
+    logger.info('Schedule update job')
     dispatcher.job_queue.run_repeating(
         _callback,
         first=1,
