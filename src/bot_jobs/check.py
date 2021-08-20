@@ -17,8 +17,8 @@ from utils import to_human_price, wowhead_link, sanitize_str
 logger = logging.getLogger(__name__)
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
-MAX_RETRIES = 1
-SLEEP_INTERVAL = 3
+MAX_RETRIES = 15
+SLEEP_INTERVAL = 300
 
 
 def register(dispatcher: Dispatcher):
