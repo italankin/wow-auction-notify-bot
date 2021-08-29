@@ -48,5 +48,8 @@ BNET_CLIENT_SECRET=<battle-net-client-secret>
 ### 4. Run image
 
 ```shell
-$ docker run --rm -d --env-file .env -v wowauctionnotifier-data:/database wowauctionnotifier
+$ docker run --rm -d \
+    --env-file .env \
+    -v wowauctionnotifier-data:/database \
+    wowauctionnotifier
 ```
