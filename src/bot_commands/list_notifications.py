@@ -36,7 +36,7 @@ def _command(update: Update, context: CallbackContext):
         item = wowhead_link(notification.item_id, item_names[notification.item_id])
         realm_name = sanitize_str(realm_names[notification.connected_realm_id])
         if notification.kind == Notification.Kind.MAX_PRICE:
-            text = f"*{realm_name}*: {item} wth maximum price of {price} and minimum quantity of {notification.value}"
+            text = f"*{realm_name}*: {item} with maximum price of {price} and minimum quantity of {notification.value}"
         elif notification.kind == Notification.Kind.MARKET_PRICE:
             text = f"*{realm_name}*: {item} with market price of {price}"
         else:
