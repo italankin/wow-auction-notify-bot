@@ -75,7 +75,9 @@ class WowGameApi:
             item_id = auction['item']['id']
             if item_id in item_ids:
                 qty = auction['quantity']
-                price = auction['unit_price'] or auction['buyout']
+                price = auction.get('unit_price') or auction.get('buyout')
+                if not price:
+                    continue
                 item = auctions_data.setdefault(item_id, Auction(item_id))
                 item.lots.append(Auction.Lot(price, qty))
         for _, auction in auctions_data.items():
