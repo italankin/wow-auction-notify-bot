@@ -83,6 +83,13 @@ def _check_now(update: Update, context: CallbackContext):
 
 
 def _check_and_notify(context: CallbackContext, connected_realm_id: int, notifications: list[Notification]):
+    try:
+        _check_and_notify_unsafe(context, connected_realm_id, notifications)
+    except Exception as e:
+        logger.error(f"_check_and_notify failed: {e}", exc_info=e)
+
+
+def _check_and_notify_unsafe(context: CallbackContext, connected_realm_id: int, notifications: list[Notification]):
     api = BotContext.get().wow_game_api
     db = BotContext.get().database
     item_names = _get_item_names(notifications)
