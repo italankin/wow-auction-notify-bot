@@ -53,3 +53,13 @@ $ docker run --rm -d \
     -v wowauctionnotifier-data:/database \
     wowauctionnotifier
 ```
+
+## Telegram
+
+1. In BotFather type `/newbot` and follow the prompts to make your bot
+2. In BotFather type `/setcommands` and put in two lines:
+```
+list - List Notifications
+add - Add Notification
+```
+3. In a message to your new bot make sure it autocompletes those two above commands when you type `/`. Try `/add`. It should walk you through prompts to make notifications.
